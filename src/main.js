@@ -1,5 +1,28 @@
 import './style.css';
 
+// ── Theme Toggle ────────────────────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+}
+
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (isDark) {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('theme', 'light');
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    localStorage.setItem('theme', 'dark');
+  }
+}
+
+initTheme();
+
+document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+
 // ── Simple SPA Router ───────────────────────────────────────────────────
 const content = document.getElementById('content');
 const navLinks = document.querySelectorAll('.nav-link');
@@ -24,26 +47,7 @@ async function renderDashboard() {
       <p>League standings and stats overview</p>
     </div>
 
-    <div class="grid grid-4 fade-in" style="animation-delay: 0.1s">
-      <div class="card">
-        <div class="stat-label">Total Movies</div>
-        <div class="stat-value" id="stat-movies">—</div>
-      </div>
-      <div class="card">
-        <div class="stat-label">League Members</div>
-        <div class="stat-value" id="stat-members">—</div>
-      </div>
-      <div class="card">
-        <div class="stat-label">Draft Periods</div>
-        <div class="stat-value" id="stat-periods">—</div>
-      </div>
-      <div class="card">
-        <div class="stat-label">API Status</div>
-        <div class="stat-value" id="stat-api">—</div>
-      </div>
-    </div>
-
-    <div class="card fade-in" style="margin-top: 1.5rem; animation-delay: 0.2s">
+    <div class="card fade-in" style="animation-delay: 0.1s">
       <h2 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem;">Recent Movies</h2>
       <div class="table-wrap">
         <table>
@@ -68,22 +72,8 @@ async function renderDashboard() {
 
   // Fetch data from API
   try {
-    const [healthRes, usersRes, moviesRes, periodsRes] = await Promise.all([
-      fetch('/api/health'),
-      fetch('/api/users'),
-      fetch('/api/movies'),
-      fetch('/api/draft-periods'),
-    ]);
-
-    const health = await healthRes.json();
-    const users = await usersRes.json();
+    const moviesRes = await fetch('/api/movies');
     const movies = await moviesRes.json();
-    const periods = await periodsRes.json();
-
-    document.getElementById('stat-movies').textContent = movies.length;
-    document.getElementById('stat-members').textContent = users.length;
-    document.getElementById('stat-periods').textContent = periods.length;
-    document.getElementById('stat-api').innerHTML = `<span class="badge badge-green">Online</span>`;
 
     const tbody = document.getElementById('movies-table-body');
     if (movies.length === 0) {
@@ -102,7 +92,6 @@ async function renderDashboard() {
       `).join('');
     }
   } catch (err) {
-    document.getElementById('stat-api').innerHTML = `<span class="badge badge-red">Offline</span>`;
     console.error('API error:', err);
   }
 }
