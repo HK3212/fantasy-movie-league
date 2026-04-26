@@ -88,13 +88,47 @@ fantasy-movie-league/
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
+|-------|------------|
 | **Runtime** | Node.js |
 | **Backend** | Express.js |
 | **Database** | SQLite via `better-sqlite3` |
 | **Frontend** | Vite (vanilla JS) |
 | **Scraping** | Cheerio + Axios |
 | **Styling** | Vanilla CSS |
+| **Testing** | Vitest + Supertest |
+
+## Testing
+
+API tests live in `server/__tests__/` and cover every route module:
+
+| Test file | What it covers |
+|-----------|----------------|
+| `health.test.js` | Health-check endpoint |
+| `auth.test.js` | Login, logout, token check, requireAdmin middleware |
+| `users.test.js` | User CRUD + seed |
+| `seasons.test.js` | Season CRUD + activate |
+| `movies.test.js` | Movie CRUD + stats update + duplicate handling |
+| `draftPeriods.test.js` | Draft period CRUD + standings + budget init |
+| `drafts.test.js` | Draft pick CRUD + duplicate & validation |
+| `admin.test.js` | Carryover calculation, db-stats, placeholder endpoints |
+
+### Running tests
+
+```bash
+# Run all tests once
+npm test
+
+# Run tests in watch mode (re-runs on file changes)
+npm run test:watch
+
+# Run a specific test file
+npx vitest run server/__tests__/seasons.test.js
+
+# Run tests with verbose output
+npx vitest run --reporter=verbose
+```
+
+> Tests run against the real SQLite database file but clean all tables between each test via `beforeEach`. They do not start the HTTP server — Supertest makes in-process requests to the Express app.
 
 ## Database
 

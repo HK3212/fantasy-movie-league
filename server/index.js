@@ -5,50 +5,57 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import db from './db.js';
 
+// Auth
+import { loginHandler, logoutHandler, checkHandler, requireAdmin } from './middleware/auth.js';
+
+// Route modules
+import usersRouter from './routes/users.js';
+import moviesRouter from './routes/movies.js';
+import seasonsRouter from './routes/seasons.js';
+import draftPeriodsRouter from './routes/draftPeriods.js';
+import draftsRouter from './routes/drafts.js';
+import adminRouter from './routes/admin.js';
+
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const app = express();
-const PORT = process.env.PORT || 3001;
 
-// ── Middleware ──────────────────────────────────────────────────────────
-app.use(cors());
-app.use(express.json());
+/** Create and configure the Express app (without starting the server). */
+export function createApp() {
+  const app = express();
 
-// ── Health check ────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+  // ── Middleware ──────────────────────────────────────────────────────────
+  app.use(cors());
+  app.use(express.json());
 
-// ── Placeholder API routes (to be built out) ─────────────────────────
-app.get('/api/users', (req, res) => {
-  const users = db.prepare('SELECT * FROM users').all();
-  res.json(users);
-});
+  // ── Auth endpoints ─────────────────────────────────────────────────────
+  app.post('/api/auth/login', loginHandler);
+  app.post('/api/auth/logout', logoutHandler);
+  app.get('/api/auth/check', checkHandler);
 
-app.get('/api/movies', (req, res) => {
-  const movies = db.prepare(`
-    SELECT m.*, ms.domestic_box_office, ms.international_box_office,
-           ms.domestic_opening_weekend, ms.letterboxd_avg_score,
-           ms.letterboxd_members_rated, ms.rt_score, ms.imdb_rating,
-           ms.last_updated as stats_updated
-    FROM movies m
-    LEFT JOIN movie_stats ms ON m.id = ms.movie_id
-  `).all();
-  res.json(movies);
-});
+  // ── Health check ────────────────────────────────────────────────────────
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
 
-app.get('/api/seasons', (req, res) => {
-  const seasons = db.prepare('SELECT * FROM seasons').all();
-  res.json(seasons);
-});
+  // ── Public API routes ──────────────────────────────────────────────────
+  app.use('/api', usersRouter);
+  app.use('/api', moviesRouter);
 
-app.get('/api/draft-periods', (req, res) => {
-  const periods = db.prepare('SELECT * FROM draft_periods').all();
-  res.json(periods);
-});
+  // ── Admin-only API routes ──────────────────────────────────────────────
+  app.use('/api', requireAdmin, seasonsRouter);
+  app.use('/api', requireAdmin, draftPeriodsRouter);
+  app.use('/api', requireAdmin, draftsRouter);
+  app.use('/api', requireAdmin, adminRouter);
+
+  return app;
+}
+
+const app = createApp();
+export default app;
 
 // ── Start server ────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`\n🎬 Fantasy Movie League API running on http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/api/health\n`);
