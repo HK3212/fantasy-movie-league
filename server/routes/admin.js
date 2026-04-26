@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import db from '../db.js';
+import { getMovieDetails as tmdbDetails } from '../services/tmdb.js';
+import { getMovieByImdbId, buildStats } from '../services/omdb.js';
 
 const router = Router();
 
@@ -9,18 +11,121 @@ router.post('/admin/import', (req, res) => {
   res.status(501).json({ error: 'Spreadsheet import not yet implemented. Coming in Phase 2.' });
 });
 
-// POST /api/admin/refresh-all — Trigger stats refresh for all movies
-// (Placeholder — services will be wired in Phase 2)
-router.post('/admin/refresh-all', (req, res) => {
-  res.status(501).json({ error: 'Stats refresh not yet implemented. Coming in Phase 2.' });
+// POST /api/admin/refresh-all — Refresh stats for all movies with an IMDB ID
+router.post('/admin/refresh-all', async (req, res) => {
+  const movies = db.prepare('SELECT * FROM movies WHERE imdb_id IS NOT NULL').all();
+
+  if (movies.length === 0) {
+    return res.json({ message: 'No movies with IMDB IDs to refresh', refreshed: 0 });
+  }
+
+  const results = [];
+  const errors = [];
+
+  for (const movie of movies) {
+    try {
+      // Fetch from OMDb
+      const omdbData = await getMovieByImdbId(movie.imdb_id);
+
+      // Optionally get TMDB data for international revenue calculation
+      let tmdbData = null;
+      if (movie.tmdb_id) {
+        try {
+          tmdbData = await tmdbDetails(movie.tmdb_id);
+        } catch (e) {
+          // TMDB fetch is optional — continue without it
+        }
+      }
+
+      const stats = buildStats(omdbData, tmdbData);
+
+      db.prepare(`
+        INSERT INTO movie_stats (movie_id, domestic_box_office, international_box_office,
+          domestic_opening_weekend, rt_score, imdb_rating, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(movie_id) DO UPDATE SET
+          domestic_box_office = COALESCE(?, domestic_box_office),
+          international_box_office = COALESCE(?, international_box_office),
+          domestic_opening_weekend = COALESCE(?, domestic_opening_weekend),
+          rt_score = COALESCE(?, rt_score),
+          imdb_rating = COALESCE(?, imdb_rating),
+          last_updated = datetime('now')
+      `).run(
+        movie.id,
+        stats.domestic_box_office, stats.international_box_office, stats.domestic_opening_weekend,
+        stats.rt_score, stats.imdb_rating,
+        stats.domestic_box_office, stats.international_box_office, stats.domestic_opening_weekend,
+        stats.rt_score, stats.imdb_rating
+      );
+
+      results.push({ id: movie.id, title: movie.title, stats });
+    } catch (err) {
+      errors.push({ id: movie.id, title: movie.title, error: err.message });
+    }
+  }
+
+  res.json({
+    message: `Refreshed ${results.length} of ${movies.length} movies`,
+    refreshed: results.length,
+    failed: errors.length,
+    results,
+    errors,
+  });
 });
 
-// POST /api/admin/refresh/:movieId — Trigger stats refresh for one movie
-router.post('/admin/refresh/:movieId', (req, res) => {
+// POST /api/admin/refresh/:movieId — Refresh stats for one movie
+router.post('/admin/refresh/:movieId', async (req, res) => {
   const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.movieId);
   if (!movie) return res.status(404).json({ error: 'Movie not found' });
 
-  res.status(501).json({ error: 'Stats refresh not yet implemented. Coming in Phase 2.' });
+  if (!movie.imdb_id) {
+    return res.status(400).json({ error: 'Movie has no IMDB ID — cannot fetch stats' });
+  }
+
+  try {
+    const omdbData = await getMovieByImdbId(movie.imdb_id);
+
+    let tmdbData = null;
+    if (movie.tmdb_id) {
+      try {
+        tmdbData = await tmdbDetails(movie.tmdb_id);
+      } catch (e) {
+        // continue without TMDB data
+      }
+    }
+
+    const stats = buildStats(omdbData, tmdbData);
+
+    db.prepare(`
+      INSERT INTO movie_stats (movie_id, domestic_box_office, international_box_office,
+        domestic_opening_weekend, rt_score, imdb_rating, last_updated)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(movie_id) DO UPDATE SET
+        domestic_box_office = COALESCE(?, domestic_box_office),
+        international_box_office = COALESCE(?, international_box_office),
+        domestic_opening_weekend = COALESCE(?, domestic_opening_weekend),
+        rt_score = COALESCE(?, rt_score),
+        imdb_rating = COALESCE(?, imdb_rating),
+        last_updated = datetime('now')
+    `).run(
+      movie.id,
+      stats.domestic_box_office, stats.international_box_office, stats.domestic_opening_weekend,
+      stats.rt_score, stats.imdb_rating,
+      stats.domestic_box_office, stats.international_box_office, stats.domestic_opening_weekend,
+      stats.rt_score, stats.imdb_rating
+    );
+
+    const updated = db.prepare(`
+      SELECT m.*, ms.*
+      FROM movies m
+      LEFT JOIN movie_stats ms ON m.id = ms.movie_id
+      WHERE m.id = ?
+    `).get(movie.id);
+
+    res.json({ message: 'Stats refreshed', movie: updated });
+  } catch (err) {
+    res.status(502).json({ error: 'Failed to fetch stats', detail: err.message });
+  }
 });
 
 // POST /api/admin/calculate-carryover — Calculate carryover from one period to the next

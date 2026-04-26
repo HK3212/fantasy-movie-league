@@ -87,4 +87,12 @@ db.exec(`
 
 console.log('✓ Database initialized at', DB_PATH);
 
+// ── Migrations ─────────────────────────────────────────────────────────
+// Add tmdb_id column (safe to re-run — silently skips if column exists)
+try {
+  db.exec('ALTER TABLE movies ADD COLUMN tmdb_id INTEGER');
+} catch (e) {
+  // Column already exists — expected after first run
+}
+
 export default db;

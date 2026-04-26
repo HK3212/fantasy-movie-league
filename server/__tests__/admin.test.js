@@ -15,9 +15,10 @@ describe('Admin API', () => {
   });
 
   describe('POST /api/admin/refresh-all', () => {
-    it('returns 501 (not yet implemented)', async () => {
+    it('returns 200 with no movies to refresh', async () => {
       const res = await request(app).post('/api/admin/refresh-all').set('Authorization', `Bearer ${token}`);
-      expect(res.status).toBe(501);
+      expect(res.status).toBe(200);
+      expect(res.body.refreshed).toBe(0);
     });
   });
 
@@ -27,10 +28,11 @@ describe('Admin API', () => {
       expect(res.status).toBe(404);
     });
 
-    it('returns 501 for existing movie', async () => {
+    it('returns 400 for movie without IMDB ID', async () => {
       const movie = (await request(app).post('/api/movies').send({ title: 'Test' })).body;
       const res = await request(app).post(`/api/admin/refresh/${movie.id}`).set('Authorization', `Bearer ${token}`);
-      expect(res.status).toBe(501);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/IMDB/);
     });
   });
 
